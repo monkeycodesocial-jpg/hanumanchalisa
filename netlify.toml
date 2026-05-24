@@ -1,5 +1,7 @@
+# Publish must NOT be repo root — overrides Netlify UI/default (fixes plugin error)
 [build]
   command = "npm run build"
+  publish = ".next"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
