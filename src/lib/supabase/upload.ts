@@ -39,11 +39,30 @@ export async function uploadToSupabase(input: UploadInput): Promise<GalleryItem>
   onProgress?.(5, "Preparing your sacred offering...");
 
   let compressed = false;
-  if (file.type.startsWith("image/") || /\.(jpe?g|png|webp|gif|heic)$/i.test(file.name)) {
-    const result = await compressImageIfNeeded(file, (msg, pct) => onProgress?.(pct, msg));
-    file = result.file;
-    compressed = result.compressed;
+  if (file.type.startsWith("image/") || /\.(jpe?g|png|webp|gif|heic|heif)$/i.test(file.name)) {
+    try {
+      const result = await compressImageIfNeeded(file, (msg, pct) => onProgress?.(pct, msg));
+      file = result.file;
+      compressed = result.compressed;
+    } catch {
+      onProgress?.(20, "Preparing image for upload...");
+    }
   }
+
+  let mime = file.type && file.type !== "application/octet-stream" ? file.type : "";
+  if (!mime) {
+    const n = file.name.toLowerCase();
+    if (/\.heic$/.test(n)) mime = "image/heic";
+    else if (/\.heif$/.test(n)) mime = "image/heif";
+    else if (/\.png$/.test(n)) mime = "image/png";
+    else if (/\.webp$/.test(n)) mime = "image/webp";
+    else if (/\.gif$/.test(n)) mime = "image/gif";
+    else if (/\.(jpe?g)$/.test(n)) mime = "image/jpeg";
+    else if (/\.mp4$/.test(n)) mime = "video/mp4";
+    else if (/\.mov$/.test(n)) mime = "video/quicktime";
+    else mime = "application/octet-stream";
+  }
+  if (compressed && mime.startsWith("image/")) mime = "image/jpeg";
 
   const safeName = sanitizeFileName(file.name);
   const storagePath = `${Date.now()}_${Math.random().toString(36).slice(2, 9)}_${safeName}`;
@@ -56,7 +75,7 @@ export async function uploadToSupabase(input: UploadInput): Promise<GalleryItem>
     .upload(storagePath, file, {
       cacheControl: "3600",
       upsert: false,
-      contentType: file.type || "application/octet-stream",
+      contentType: mime,
     });
 
   if (storageError) {
@@ -72,7 +91,7 @@ export async function uploadToSupabase(input: UploadInput): Promise<GalleryItem>
     .from("uploads")
     .insert({
       file_url: fileUrl,
-      file_type: file.type || "application/octet-stream",
+      file_type: mime,
       file_name: safeName,
       uploaded_by: sanitizeText(input.name || "Anonymous Devotee", 80),
       city: sanitizeText(input.city || "", 80),

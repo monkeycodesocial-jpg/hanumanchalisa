@@ -1,4 +1,5 @@
 import imageCompression from "browser-image-compression";
+import { isIOS, isMobileDevice } from "./device";
 import { isImageFile } from "./validateFile";
 
 const TARGET_BYTES = 200 * 1024; // 200KB
@@ -19,16 +20,36 @@ export async function compressImageIfNeeded(
 
   onProgress?.("Optimizing image...", 15);
 
-  const compressed = await imageCompression(file, {
-    maxSizeMB: 0.2,
-    maxWidthOrHeight: 1920,
-    useWebWorker: true,
-    onProgress: (p) => {
-      onProgress?.("Optimizing image...", 15 + Math.round(p * 0.4));
-    },
-  });
+  // Web workers often fail on iOS Safari — run compression on main thread for mobile
+  const useWebWorker = !isMobileDevice() && !isIOS();
 
-  onProgress?.("Image optimized", 55);
+  try {
+    const compressed = await imageCompression(file, {
+      maxSizeMB: 0.2,
+      maxWidthOrHeight: 1920,
+      useWebWorker,
+      fileType: "image/jpeg",
+      initialQuality: 0.85,
+      onProgress: (p) => {
+        onProgress?.("Optimizing image...", 15 + Math.round(p * 0.4));
+      },
+    });
 
-  return { file: compressed, compressed: true };
+    onProgress?.("Image optimized", 55);
+
+    const out =
+      compressed.type === "image/jpeg"
+        ? compressed
+        : new File([compressed], file.name.replace(/\.\w+$/i, ".jpg"), {
+            type: "image/jpeg",
+            lastModified: Date.now(),
+          });
+
+    return { file: out, compressed: true };
+  } catch (err) {
+    console.warn("Image compression failed, using original:", err);
+    onProgress?.("Using original image...", 40);
+    // If original is within upload limit, continue; caller validates size
+    return { file, compressed: false };
+  }
 }

@@ -4,7 +4,6 @@ import "./globals.css";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SpiritualDecor from "@/components/SpiritualDecor";
-import MusicToggle from "@/components/MusicToggle";
 
 const cinzel = Cinzel({
   subsets: ["latin"],
@@ -60,7 +59,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Header />
         <main className="relative z-10">{children}</main>
         <Footer />
-        <MusicToggle />
       </body>
     </html>
   );

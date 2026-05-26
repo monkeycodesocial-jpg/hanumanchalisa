@@ -10,7 +10,7 @@ values (
   'hanuman-gallery',
   true,
   209715200, -- 200MB max per file
-  array['image/jpeg','image/png','image/webp','image/gif','image/heic','video/mp4','video/webm','video/quicktime']
+  array['image/jpeg','image/png','image/webp','image/gif','image/heic','image/heif','video/mp4','video/webm','video/quicktime']
 )
 on conflict (id) do update set
   public = true,

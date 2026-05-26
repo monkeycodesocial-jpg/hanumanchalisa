@@ -16,6 +16,7 @@ import UploadProgress from "./UploadProgress";
 import UploadSuccessToast from "./UploadSuccessToast";
 
 export default function UploadZone() {
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const previewUrlRef = useRef<string | null>(null);
 
   const [file, setFile] = useState<File | null>(null);
@@ -37,9 +38,12 @@ export default function UploadZone() {
     setPreview(null);
   }, []);
 
-  useEffect(() => () => {
-    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    },
+    []
+  );
 
   const handleFile = useCallback(
     (raw: File) => {
@@ -63,16 +67,29 @@ export default function UploadZone() {
     [clearPreview]
   );
 
+  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) handleFile(f);
+    e.target.value = "";
+  };
+
+  const openFilePicker = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+      fileInputRef.current.click();
+    }
+  };
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!file) {
-      setError("Please select a photo or video");
+      setError("Please choose a photo or video first, then tap Share.");
       setPhase("error");
       return;
     }
 
     if (!isSupabaseConfigured()) {
-      setError("Supabase is not configured. Add keys to .env.local and restart the server.");
+      setError("Site configuration error. Please try again later.");
       setPhase("error");
       return;
     }
@@ -80,6 +97,7 @@ export default function UploadZone() {
     setPhase("compressing");
     setProgress(0);
     setError("");
+    setStatusMessage("Starting upload...");
 
     try {
       const item = await uploadToSupabase({
@@ -102,47 +120,58 @@ export default function UploadZone() {
       window.dispatchEvent(new CustomEvent("gallery-updated"));
     } catch (err) {
       setPhase("error");
-      setError(err instanceof Error ? err.message : "Upload failed");
+      const msg = err instanceof Error ? err.message : "Upload failed";
+      setError(
+        msg.includes("Failed to fetch") || msg.includes("Network")
+          ? "Network error. Check mobile data/Wi‑Fi and try again."
+          : msg
+      );
     }
   };
 
   const isBusy = phase === "compressing" || phase === "uploading";
-  const willCompress = file && isImageFile(file) && file.size > IMAGE_COMPRESS_THRESHOLD_KB * 1024;
+  const willCompress =
+    file && isImageFile(file) && file.size > IMAGE_COMPRESS_THRESHOLD_KB * 1024;
 
   return (
     <>
       <form onSubmit={onSubmit} className="max-w-2xl mx-auto">
         <input
-          id="bhakti-file-input"
+          ref={fileInputRef}
           type="file"
           accept="image/*,video/*,.heic,.heif"
           disabled={isBusy}
-          className="sr-only"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) handleFile(f);
-            e.target.value = "";
-          }}
+          className="hidden"
+          aria-hidden
+          onChange={onFileChange}
         />
 
-        <label
-          htmlFor="bhakti-file-input"
-          className={`relative lotus-upload-zone border-2 border-dashed rounded-2xl p-8 md:p-12 text-center block cursor-pointer transition-all ${
-            isBusy ? "pointer-events-none opacity-80" : "border-divine-gold/40 hover:border-divine-gold/70"
+        <div
+          className={`lotus-upload-zone border-2 border-dashed rounded-2xl p-6 md:p-10 text-center transition-all ${
+            isBusy ? "opacity-80" : "border-divine-gold/40"
           }`}
         >
-          <p className="text-4xl mb-3 pointer-events-none">📸</p>
-          <p className="font-devanagari text-lg text-amber-50 mb-1 pointer-events-none">
-            {file ? "Tap to change file" : "Tap or drag your bhakti photo / video"}
+          <p className="text-4xl mb-3">📸</p>
+          <p className="font-devanagari text-lg text-amber-50 mb-2">
+            Share your bhakti photo or video
           </p>
-          <p className="text-amber-200/60 text-sm pointer-events-none">
-            Images auto-compress over {IMAGE_COMPRESS_THRESHOLD_KB}KB • Max 20MB images / 200MB videos
+          <p className="text-amber-200/60 text-sm mb-5">
+            Tap below to choose from gallery • Max 20MB images / 200MB videos
           </p>
 
+          <button
+            type="button"
+            disabled={isBusy}
+            onClick={openFilePicker}
+            className="w-full max-w-sm mx-auto py-4 px-6 rounded-full golden-border bg-divine-maroon/40 text-divine-gold font-spiritual text-base active:scale-95 transition-transform disabled:opacity-50 touch-manipulation min-h-[48px]"
+          >
+            {file ? "Change Photo / Video" : "Choose Photo or Video"}
+          </button>
+
           {file && (
-            <p className="mt-3 text-divine-gold text-sm font-medium pointer-events-none">
-              ✓ {file.name} ({(file.size / 1024).toFixed(0)} KB)
-              {willCompress && " — will optimize before upload"}
+            <p className="mt-4 text-divine-gold text-sm font-medium break-all px-2">
+              ✓ Selected ({(file.size / 1024 / 1024).toFixed(1)} MB)
+              {willCompress && " — will optimize"}
             </p>
           )}
 
@@ -150,19 +179,19 @@ export default function UploadZone() {
             <img
               src={preview}
               alt="Preview"
-              className="mt-4 max-h-56 mx-auto rounded-lg object-contain golden-border pointer-events-none"
+              className="mt-4 max-h-48 mx-auto rounded-lg object-contain golden-border w-full"
             />
           )}
           {preview && file && isVideoFile(file) && (
             <video
               src={preview}
-              className="mt-4 max-h-56 mx-auto rounded-lg golden-border w-full max-w-md pointer-events-none"
+              className="mt-4 max-h-48 mx-auto rounded-lg golden-border w-full"
               muted
               playsInline
               controls
             />
           )}
-        </label>
+        </div>
 
         <div className="grid sm:grid-cols-2 gap-4 mt-6">
           <input
@@ -172,7 +201,7 @@ export default function UploadZone() {
             onChange={(e) => setName(e.target.value)}
             maxLength={80}
             disabled={isBusy}
-            className="px-4 py-3 rounded-xl bg-divine-deep/80 border border-divine-gold/30 text-amber-50 placeholder:text-amber-200/40 focus:border-divine-gold outline-none disabled:opacity-50"
+            className="px-4 py-3 text-base rounded-xl bg-divine-deep/80 border border-divine-gold/30 text-amber-50 placeholder:text-amber-200/40 focus:border-divine-gold outline-none disabled:opacity-50"
           />
           <input
             type="text"
@@ -181,7 +210,7 @@ export default function UploadZone() {
             onChange={(e) => setCity(e.target.value)}
             maxLength={80}
             disabled={isBusy}
-            className="px-4 py-3 rounded-xl bg-divine-deep/80 border border-divine-gold/30 text-amber-50 placeholder:text-amber-200/40 focus:border-divine-gold outline-none disabled:opacity-50"
+            className="px-4 py-3 text-base rounded-xl bg-divine-deep/80 border border-divine-gold/30 text-amber-50 placeholder:text-amber-200/40 focus:border-divine-gold outline-none disabled:opacity-50"
           />
         </div>
 
@@ -192,7 +221,7 @@ export default function UploadZone() {
           maxLength={300}
           rows={3}
           disabled={isBusy}
-          className="w-full mt-4 px-4 py-3 rounded-xl bg-divine-deep/80 border border-divine-gold/30 text-amber-50 placeholder:text-amber-200/40 focus:border-divine-gold outline-none resize-none disabled:opacity-50"
+          className="w-full mt-4 px-4 py-3 text-base rounded-xl bg-divine-deep/80 border border-divine-gold/30 text-amber-50 placeholder:text-amber-200/40 focus:border-divine-gold outline-none resize-none disabled:opacity-50"
         />
 
         <AnimatePresence>
@@ -206,7 +235,7 @@ export default function UploadZone() {
         </AnimatePresence>
 
         {error && (
-          <p className="mt-4 text-center text-sm text-red-400 bg-red-950/30 rounded-lg py-2 px-3">
+          <p className="mt-4 text-center text-sm text-red-400 bg-red-950/30 rounded-lg py-3 px-3 break-words">
             {error}
           </p>
         )}
@@ -214,18 +243,23 @@ export default function UploadZone() {
         <motion.button
           type="submit"
           disabled={!file || isBusy}
-          whileHover={!isBusy && file ? { scale: 1.02 } : {}}
-          className="w-full mt-6 py-4 rounded-full bg-gradient-to-r from-saffron-500 via-saffron-600 to-divine-maroon text-white font-spiritual tracking-wider disabled:opacity-50 shadow-xl flex items-center justify-center gap-2"
+          className="w-full mt-6 py-4 min-h-[52px] rounded-full bg-gradient-to-r from-saffron-500 via-saffron-600 to-divine-maroon text-white font-spiritual tracking-wider text-base disabled:opacity-50 shadow-xl flex items-center justify-center gap-2 touch-manipulation active:scale-[0.98]"
         >
           {isBusy ? (
             <>
-              <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin shrink-0" />
               {phase === "compressing" ? "Optimizing..." : "Uploading..."}
             </>
-          ) : (
+          ) : file ? (
             "Share Your Bhakti Moment"
+          ) : (
+            "Select a file first"
           )}
         </motion.button>
+
+        <p className="text-center text-amber-200/50 text-xs mt-3">
+          Step 1: Choose file → Step 2: Tap Share
+        </p>
       </form>
 
       <AnimatePresence>
